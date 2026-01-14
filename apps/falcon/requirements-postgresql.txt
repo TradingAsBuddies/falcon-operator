@@ -1,0 +1,5 @@
+# PostgreSQL Support for Falcon Trading Platform
+# Install with: pip install -r requirements-postgresql.txt
+
+# PostgreSQL adapter
+psycopg2-binary==2.9.9

@@ -1,0 +1,259 @@
+name: Docker Build and Test
+
+on:
+  push:
+    branches:
+      - main
+      - development
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: falcon-trading:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Test container structure
+        run: |
+          echo "Testing container structure..."
+
+          # Check that image was built
+          docker images | grep falcon-trading
+
+          # Inspect image
+          docker inspect falcon-trading:test
+
+      - name: Test make install in container
+        run: |
+          echo "Testing installation inside container..."
+
+          # Run container and check installation (override entrypoint)
+          docker run --rm --entrypoint /bin/bash falcon-trading:test -c "
+              set -e
+              echo 'Checking FHS directory structure...'
+              echo '  - Checking /opt/falcon...'
+              test -d /opt/falcon && echo '    ✓ /opt/falcon exists' || { echo '    ✗ /opt/falcon missing'; exit 1; }
+              echo '  - Checking /etc/falcon...'
+              test -d /etc/falcon && echo '    ✓ /etc/falcon exists' || { echo '    ✗ /etc/falcon missing'; exit 1; }
+              echo '  - Checking /var/lib/falcon...'
+              test -d /var/lib/falcon && echo '    ✓ /var/lib/falcon exists' || { echo '    ✗ /var/lib/falcon missing'; exit 1; }
+              echo '  - Checking /var/cache/falcon...'
+              test -d /var/cache/falcon && echo '    ✓ /var/cache/falcon exists' || { echo '    ✗ /var/cache/falcon missing'; exit 1; }
+              echo '  - Checking /var/log/falcon...'
+              test -d /var/log/falcon && echo '    ✓ /var/log/falcon exists' || { echo '    ✗ /var/log/falcon missing'; exit 1; }
+              echo 'FHS directories: OK'
+
+              echo 'Checking installed files...'
+              echo '  - Checking /opt/falcon/db_manager.py...'
+              test -f /opt/falcon/db_manager.py && echo '    ✓ db_manager.py exists' || { echo '    ✗ db_manager.py missing'; exit 1; }
+              echo '  - Checking /opt/falcon/config.py...'
+              test -f /opt/falcon/config.py && echo '    ✓ config.py exists' || { echo '    ✗ config.py missing'; exit 1; }
+              echo '  - Checking /opt/falcon/dashboard_server.py...'
+              test -f /opt/falcon/dashboard_server.py && echo '    ✓ dashboard_server.py exists' || { echo '    ✗ dashboard_server.py missing'; exit 1; }
+              echo 'Application files: OK'
+
+              echo 'Checking configuration files...'
+              echo '  - Listing /etc/falcon contents:'
+              ls -la /etc/falcon/ || echo '    ERROR: Cannot list /etc/falcon'
+              echo '  - Checking /etc/falcon/config.conf...'
+              test -f /etc/falcon/config.conf && echo '    ✓ config.conf exists' || { echo '    ✗ config.conf missing'; exit 1; }
+              echo '  - Checking /etc/falcon/secrets.env...'
+              test -f /etc/falcon/secrets.env && echo '    ✓ secrets.env exists' || { echo '    ✗ secrets.env missing'; exit 1; }
+              echo 'Configuration files: OK'
+
+              echo 'Checking virtual environment...'
+              echo '  - Checking /opt/falcon/venv...'
+              test -d /opt/falcon/venv && echo '    ✓ venv directory exists' || { echo '    ✗ venv directory missing'; exit 1; }
+              echo '  - Checking /opt/falcon/venv/bin/python3...'
+              test -f /opt/falcon/venv/bin/python3 && echo '    ✓ python3 exists' || { echo '    ✗ python3 missing'; exit 1; }
+              echo 'Virtual environment: OK'
+
+              echo 'Checking service user...'
+              echo '  - Checking falcon user...'
+              id falcon && echo '    ✓ falcon user exists' || { echo '    ✗ falcon user missing'; exit 1; }
+              echo 'Service user: OK'
+
+              echo 'All installation checks passed!'
+            "
+
+      - name: Test Python modules
+        run: |
+          echo "Testing Python modules..."
+
+          docker run --rm --entrypoint /bin/bash falcon-trading:test -c "
+              set -e
+              cd /opt/falcon
+
+              echo 'Testing db_manager import...'
+              /opt/falcon/venv/bin/python3 -c 'import db_manager; print(\"db_manager OK\")'
+
+              echo 'Testing config import...'
+              /opt/falcon/venv/bin/python3 -c 'import config; print(\"config OK\")'
+
+              echo 'Testing flask import...'
+              /opt/falcon/venv/bin/python3 -c 'import flask; print(\"flask OK\")'
+
+              echo 'All Python imports successful!'
+            "
+
+      - name: Test database initialization
+        run: |
+          echo "Testing database initialization..."
+
+          docker run --rm --entrypoint /bin/bash -e FALCON_ENV=production falcon-trading:test -c "
+              set -e
+              cd /opt/falcon
+
+              echo 'Initializing SQLite database...'
+              /opt/falcon/venv/bin/python3 db_manager.py
+
+              echo 'Checking database file...'
+              test -f /var/lib/falcon/paper_trading.db || exit 1
+
+              echo 'Database initialization: OK'
+            "
+
+      - name: Test configuration validation
+        run: |
+          echo "Testing configuration validation..."
+
+          docker run --rm --entrypoint /bin/bash -e FALCON_ENV=production falcon-trading:test -c "
+              set -e
+              cd /opt/falcon
+
+              echo 'Validating configuration...'
+              /opt/falcon/venv/bin/python3 config.py
+
+              echo 'Configuration validation: OK'
+            "
+
+      - name: Start container and test health endpoint
+        run: |
+          echo "Starting container for health check..."
+
+          # Start container in background
+          docker run -d --name falcon-test \
+            -p 5000:5000 \
+            -e FALCON_ENV=production \
+            falcon-trading:test
+
+          # Wait for container to start
+          echo "Waiting for container to be ready..."
+          sleep 15
+
+          # Check container is running
+          docker ps | grep falcon-test
+
+          # Check logs
+          echo "Container logs:"
+          docker logs falcon-test
+
+          # Test health endpoint
+          echo "Testing health endpoint..."
+          curl -f http://localhost:5000/health || {
+            echo "Health check failed!"
+            docker logs falcon-test
+            exit 1
+          }
+
+          echo "Health check: OK"
+
+          # Cleanup
+          docker stop falcon-test
+          docker rm falcon-test
+
+      - name: Test with docker compose
+        run: |
+          echo "Testing with docker compose..."
+
+          # Start services
+          docker compose up -d falcon
+
+          # Wait for startup
+          echo "Waiting for services to start..."
+          sleep 20
+
+          # Check service is running
+          docker compose ps
+
+          # Check logs
+          echo "Service logs:"
+          docker compose logs falcon
+
+          # Test health endpoint
+          echo "Testing health endpoint..."
+          curl -f http://localhost:5000/health || {
+            echo "Health check failed!"
+            docker compose logs falcon
+            exit 1
+          }
+
+          echo "Docker Compose test: OK"
+
+          # Cleanup
+          docker compose down -v
+
+      - name: Build and push Docker image
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Output image tags
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "Docker image pushed with tags:"
+          echo "${{ steps.meta.outputs.tags }}"

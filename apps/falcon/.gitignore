@@ -1,0 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Virtual Environment
+backtest/
+venv/
+env/
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Environment variables and secrets
+.env
+.env.*
+*.env
+.local/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Data files
+*.csv
+*.json
+screened_stocks.json
+
+# Backup files
+*.backup
+*.bak
+*~
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# SSL Certificates
+*.crt
+*.key
+*.pem
+
+# PDFs and images
+*.pdf
+*.png
+*.jpg
+*.jpeg
+
+# Archives
+*.zip
+*.tar.gz
+
+# Claude
+.claude/
+
+# Docker
+.dockerignore
+docker-compose.override.yml

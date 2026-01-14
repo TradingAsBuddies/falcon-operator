@@ -1,0 +1,119 @@
+version: '3.8'
+
+services:
+  # Falcon Trading Platform - SQLite mode
+  falcon:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: falcon-trading:latest
+    container_name: falcon-trading
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "5000:5000"
+    volumes:
+      # NOTE: /etc/falcon is NOT mounted - configs are baked into image
+      # To override: add your own volume mount like - ./my-config:/etc/falcon
+      # Persist data
+      - falcon-data:/var/lib/falcon
+      # Persist cache
+      - falcon-cache:/var/cache/falcon
+      # Persist logs
+      - falcon-logs:/var/log/falcon
+    environment:
+      - FALCON_ENV=production
+      - DB_TYPE=sqlite
+      - DB_PATH=/var/lib/falcon/paper_trading.db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - falcon-network
+
+  # Falcon Trading Platform - PostgreSQL mode
+  falcon-postgres:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: falcon-trading:latest
+    container_name: falcon-trading-postgres
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+      - "8443:443"
+      - "5001:5000"
+    volumes:
+      # NOTE: /etc/falcon is NOT mounted - configs are baked into image
+      - falcon-postgres-data:/var/lib/falcon
+      - falcon-postgres-cache:/var/cache/falcon
+      - falcon-postgres-logs:/var/log/falcon
+    environment:
+      - FALCON_ENV=production
+      - DB_TYPE=postgresql
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=falcon
+      - DB_USER=falcon
+      - DB_PASSWORD=falcon_secure_password
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - falcon-network
+    profiles:
+      - postgres
+
+  # PostgreSQL database (optional, use with postgres profile)
+  postgres:
+    image: postgres:16-alpine
+    container_name: falcon-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=falcon
+      - POSTGRES_USER=falcon
+      - POSTGRES_PASSWORD=falcon_secure_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U falcon"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - falcon-network
+    profiles:
+      - postgres
+
+volumes:
+  # SQLite mode volumes
+  falcon-data:
+    driver: local
+  falcon-cache:
+    driver: local
+  falcon-logs:
+    driver: local
+
+  # PostgreSQL mode volumes
+  falcon-postgres-data:
+    driver: local
+  falcon-postgres-cache:
+    driver: local
+  falcon-postgres-logs:
+    driver: local
+  postgres-data:
+    driver: local
+
+networks:
+  falcon-network:
+    driver: bridge

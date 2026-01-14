@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Falcon Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e4e4e4;
+            padding: 1rem;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid #333;
+            margin-bottom: 1.5rem;
+        }
+        h1 { color: #00d4ff; font-size: 1.8rem; }
+        .back-link { color: #00d4ff; text-decoration: none; }
+        .back-link:hover { text-decoration: underline; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 1rem;
+            border: 1px solid #333;
+        }
+        .stat-card h3 { color: #888; font-size: 0.8rem; text-transform: uppercase; }
+        .stat-card .value { font-size: 1.5rem; color: #fff; margin-top: 0.3rem; }
+        .positive { color: #6bcb77 !important; }
+        .negative { color: #ff6b6b !important; }
+
+        .panel {
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 1rem;
+            border: 1px solid #333;
+            margin-bottom: 1rem;
+        }
+        .panel h2 {
+            color: #00d4ff;
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #333;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 0.5rem; text-align: left; border-bottom: 1px solid #333; font-size: 0.85rem; }
+        th { color: #888; }
+        .ticker { font-weight: bold; }
+        .status { padding: 0.2rem 0.5rem; border-radius: 4px; font-size: 0.75rem; }
+        .status-running { background: rgba(107,203,119,0.2); color: #6bcb77; }
+        .status-stopped { background: rgba(255,107,107,0.2); color: #ff6b6b; }
+
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+        .loading { color: #888; text-align: center; padding: 2rem; }
+        .error { color: #ff6b6b; }
+
+        /* Screener Recommendations Styles */
+        .recommendation-card {
+            background: rgba(255,255,255,0.03);
+            border-radius: 6px;
+            padding: 0.75rem;
+            margin-bottom: 0.75rem;
+            border-left: 3px solid #555;
+        }
+        .recommendation-card.buy { border-left-color: #6bcb77; }
+        .recommendation-card.avoid { border-left-color: #ff6b6b; }
+        .recommendation-card.watch { border-left-color: #ffb84d; }
+
+        .rec-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+        .rec-ticker {
+            font-size: 1.1rem;
+            font-weight: bold;
+            color: #00d4ff;
+        }
+        .rec-action {
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+        .rec-action.buy { background: rgba(107,203,119,0.2); color: #6bcb77; }
+        .rec-action.avoid { background: rgba(255,107,107,0.2); color: #ff6b6b; }
+        .rec-action.watch { background: rgba(255,184,77,0.2); color: #ffb84d; }
+
+        .rec-details {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-size: 0.8rem;
+        }
+        .rec-detail-label { color: #888; }
+        .rec-detail-value { color: #fff; font-weight: 500; }
+
+        .rec-reasoning {
+            font-size: 0.8rem;
+            color: #bbb;
+            line-height: 1.4;
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid #333;
+        }
+
+        .rec-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 0.5rem;
+            font-size: 0.75rem;
+            color: #888;
+        }
+        .confidence-bar {
+            display: inline-block;
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            width: 60px;
+            overflow: hidden;
+        }
+        .confidence-fill {
+            height: 100%;
+            background: #00d4ff;
+            transition: width 0.3s;
+        }
+
+        .screener-timestamp {
+            font-size: 0.75rem;
+            color: #888;
+            margin-bottom: 0.75rem;
+        }
+
+        /* One-click trading styles */
+        .trade-button {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 0.5rem;
+            width: 100%;
+        }
+        .trade-button.buy {
+            background: #6bcb77;
+            color: #1a1a2e;
+        }
+        .trade-button.buy:hover {
+            background: #5bb567;
+            transform: translateY(-1px);
+        }
+        .trade-button.sell {
+            background: #ff6b6b;
+            color: #fff;
+        }
+        .trade-button.sell:hover {
+            background: #ff5252;
+            transform: translateY(-1px);
+        }
+        .trade-button:disabled {
+            background: #555;
+            color: #888;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .trade-button.small {
+            padding: 0.3rem 0.6rem;
+            font-size: 0.75rem;
+            width: auto;
+        }
+
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal.show {
+            display: flex;
+        }
+        .modal-content {
+            background: #1a1a2e;
+            border: 1px solid #00d4ff;
+            border-radius: 8px;
+            padding: 2rem;
+            max-width: 500px;
+            width: 90%;
+        }
+        .modal-header {
+            color: #00d4ff;
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #333;
+        }
+        .modal-body {
+            margin-bottom: 1.5rem;
+        }
+        .modal-detail {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #333;
+        }
+        .modal-detail:last-child {
+            border-bottom: none;
+        }
+        .modal-label {
+            color: #888;
+        }
+        .modal-value {
+            color: #fff;
+            font-weight: bold;
+        }
+        .modal-buttons {
+            display: flex;
+            gap: 1rem;
+        }
+        .modal-button {
+            flex: 1;
+            padding: 0.75rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .modal-button.confirm {
+            background: #6bcb77;
+            color: #1a1a2e;
+        }
+        .modal-button.confirm:hover {
+            background: #5bb567;
+        }
+        .modal-button.cancel {
+            background: #333;
+            color: #fff;
+        }
+        .modal-button.cancel:hover {
+            background: #444;
+        }
+
+        /* Toast notification */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 1rem 1.5rem;
+            border-radius: 6px;
+            color: #fff;
+            font-weight: bold;
+            z-index: 2000;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .toast.show {
+            opacity: 1;
+        }
+        .toast.success {
+            background: #6bcb77;
+            color: #1a1a2e;
+        }
+        .toast.error {
+            background: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Trading Dashboard</h1>
+            <a href="/" class="back-link">Back to Home</a>
+        </header>
+
+        <div class="grid">
+            <div class="stat-card">
+                <h3>Total Value</h3>
+                <div class="value" id="total-value">--</div>
+            </div>
+            <div class="stat-card">
+                <h3>Cash</h3>
+                <div class="value" id="cash">--</div>
+            </div>
+            <div class="stat-card">
+                <h3>Positions Value</h3>
+                <div class="value" id="positions-value">--</div>
+            </div>
+            <div class="stat-card">
+                <h3>Total Return</h3>
+                <div class="value" id="total-return">--</div>
+            </div>
+        </div>
+
+        <div class="two-col">
+            <div class="panel">
+                <h2>Current Positions</h2>
+                <div id="positions-content"><div class="loading">Loading...</div></div>
+            </div>
+            <div class="panel">
+                <h2>Recent Trades</h2>
+                <div id="trades-content"><div class="loading">Loading...</div></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h2>Bot Status</h2>
+            <div id="bot-status"><div class="loading">Loading...</div></div>
+        </div>
+
+        <div class="panel">
+            <h2>Trading Statistics</h2>
+            <div id="stats-content"><div class="loading">Loading...</div></div>
+        </div>
+
+        <div class="panel">
+            <h2>AI Screener Recommendations</h2>
+            <div id="screener-content"><div class="loading">Loading...</div></div>
+        </div>
+    </div>
+
+    <!-- Trade Confirmation Modal -->
+    <div class="modal" id="tradeModal">
+        <div class="modal-content">
+            <div class="modal-header">Confirm Trade</div>
+            <div class="modal-body" id="modalBody"></div>
+            <div class="modal-buttons">
+                <button class="modal-button cancel" onclick="closeTradeModal()">Cancel</button>
+                <button class="modal-button confirm" id="confirmBtn" onclick="executeTrade()">Confirm Buy</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const fmt = (n) => n !== undefined ? '$' + n.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '--';
+        const pct = (n) => n !== undefined ? n.toFixed(2) + '%' : '--';
+
+        async function loadAccount() {
+            try {
+                const res = await fetch('/api/account');
+                if (!res.ok) throw new Error('Not available');
+                const data = await res.json();
+
+                document.getElementById('total-value').textContent = fmt(data.totalValue);
+                document.getElementById('cash').textContent = fmt(data.cash);
+                document.getElementById('positions-value').textContent = fmt(data.positionsValue);
+
+                const returnPct = ((data.totalValue - data.initialBalance) / data.initialBalance * 100);
+                const returnEl = document.getElementById('total-return');
+                returnEl.textContent = pct(returnPct);
+                returnEl.className = 'value ' + (returnPct >= 0 ? 'positive' : 'negative');
+            } catch (e) {
+                document.getElementById('total-value').innerHTML = '<span class="error">Bot not running</span>';
+            }
+        }
+
+        async function loadPositions() {
+            const content = document.getElementById('positions-content');
+            try {
+                const res = await fetch('/api/positions');
+                if (!res.ok) throw new Error('Not available');
+                const positions = await res.json();
+
+                if (positions.length === 0) {
+                    content.innerHTML = '<div class="loading">No open positions</div>';
+                    return;
+                }
+
+                let html = '<table><thead><tr><th>Symbol</th><th>Qty</th><th>Avg Price</th><th>Current</th><th>P&L</th><th>Stop-Loss</th><th>Action</th></tr></thead><tbody>';
+                for (const p of positions) {
+                    const pnl = (p.currentPrice - p.avgPrice) * p.quantity;
+                    const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+                    const pnlPct = ((p.currentPrice - p.avgPrice) / p.avgPrice * 100).toFixed(2);
+
+                    // Calculate stop-loss status
+                    const hasStopLoss = p.stopLoss && p.stopLoss > 0;
+                    const stopLossStatus = hasStopLoss
+                        ? (p.currentPrice <= p.stopLoss ? 'TRIGGERED!' : fmt(p.stopLoss))
+                        : 'Not Set';
+                    const stopLossClass = hasStopLoss
+                        ? (p.currentPrice <= p.stopLoss ? 'negative' : '')
+                        : '';
+
+                    html += `<tr>
+                        <td class="ticker">${p.symbol}</td>
+                        <td>${p.quantity}</td>
+                        <td>${fmt(p.avgPrice)}</td>
+                        <td>${fmt(p.currentPrice)}</td>
+                        <td class="${pnlClass}">${fmt(pnl)} (${pnlPct}%)</td>
+                        <td class="${stopLossClass}" style="cursor:pointer" onclick="showSetStopLossModal('${p.symbol}', ${p.currentPrice}, ${p.avgPrice}, ${p.stopLoss || 0})">
+                            ${stopLossStatus}
+                        </td>
+                        <td>
+                            <button class="trade-button sell small" onclick="showSellModal('${p.symbol}', ${p.quantity}, ${p.currentPrice}, ${p.avgPrice})">
+                                Sell
+                            </button>
+                        </td>
+                    </tr>`;
+                }
+                html += '</tbody></table>';
+                content.innerHTML = html;
+            } catch (e) {
+                content.innerHTML = '<div class="loading">Positions unavailable</div>';
+            }
+        }
+
+        async function loadTrades() {
+            const content = document.getElementById('trades-content');
+            try {
+                const res = await fetch('/api/trades');
+                const trades = await res.json();
+
+                if (trades.length === 0) {
+                    content.innerHTML = '<div class="loading">No trades yet</div>';
+                    return;
+                }
+
+                let html = '<table><thead><tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Price</th><th>Time</th></tr></thead><tbody>';
+                for (const t of trades.slice(0, 10)) {
+                    const sideClass = t.side === 'buy' ? 'positive' : 'negative';
+                    html += `<tr>
+                        <td class="ticker">${t.symbol}</td>
+                        <td class="${sideClass}">${t.side.toUpperCase()}</td>
+                        <td>${t.quantity}</td>
+                        <td>${fmt(t.price)}</td>
+                        <td>${new Date(t.timestamp).toLocaleString()}</td>
+                    </tr>`;
+                }
+                html += '</tbody></table>';
+                content.innerHTML = html;
+            } catch (e) {
+                content.innerHTML = '<div class="loading">Trades unavailable</div>';
+            }
+        }
+
+        async function loadBotStatus() {
+            const content = document.getElementById('bot-status');
+            try {
+                const res = await fetch('/api/bot/status');
+                const data = await res.json();
+
+                const statusClass = data.running ? 'status-running' : 'status-stopped';
+                const statusText = data.running ? 'Running' : 'Stopped';
+
+                content.innerHTML = `
+                    <p><strong>Status:</strong> <span class="status ${statusClass}">${statusText}</span></p>
+                    <p><strong>Symbols:</strong> ${data.symbols ? data.symbols.join(', ') : 'N/A'}</p>
+                    <p><strong>Update Interval:</strong> ${data.updateInterval || 'N/A'}s</p>
+                `;
+            } catch (e) {
+                content.innerHTML = '<div class="loading">Bot status unavailable - trading bot not initialized</div>';
+            }
+        }
+
+        async function loadStats() {
+            const content = document.getElementById('stats-content');
+            try {
+                const res = await fetch('/api/trades/summary');
+                const data = await res.json();
+
+                content.innerHTML = `
+                    <table>
+                        <tr><td>Total Trades</td><td><strong>${data.totalTrades}</strong></td></tr>
+                        <tr><td>Winning Trades</td><td class="positive">${data.winningTrades}</td></tr>
+                        <tr><td>Losing Trades</td><td class="negative">${data.losingTrades}</td></tr>
+                        <tr><td>Win Rate</td><td>${data.winRate.toFixed(1)}%</td></tr>
+                        <tr><td>Best Trade</td><td class="positive">${fmt(data.bestTrade)}</td></tr>
+                        <tr><td>Worst Trade</td><td class="negative">${fmt(data.worstTrade)}</td></tr>
+                        <tr><td>Total P&L</td><td class="${data.totalPnL >= 0 ? 'positive' : 'negative'}">${fmt(data.totalPnL)}</td></tr>
+                    </table>
+                `;
+            } catch (e) {
+                content.innerHTML = '<div class="loading">Statistics unavailable</div>';
+            }
+        }
+
+        async function loadRecommendations() {
+            const content = document.getElementById('screener-content');
+            try {
+                const res = await fetch('/api/recommendations');
+                const data = await res.json();
+
+                if (data.status === 'no_data' || !data.recommendations || data.recommendations.length === 0) {
+                    content.innerHTML = '<div class="loading">No screening results available yet</div>';
+                    return;
+                }
+
+                // Format timestamp
+                const timestamp = data.timestamp ? new Date(data.timestamp).toLocaleString() : 'N/A';
+                const screenType = data.screen_type || 'Unknown';
+                const totalStocks = data.total_stocks_screened || 0;
+
+                let html = `
+                    <div class="screener-timestamp">
+                        <strong>${screenType.charAt(0).toUpperCase() + screenType.slice(1)} Screen</strong> •
+                        ${timestamp} •
+                        ${totalStocks} stocks analyzed
+                    </div>
+                `;
+
+                // Render each recommendation
+                for (const rec of data.recommendations) {
+                    const action = rec.entry && rec.entry !== 'AVOID' && rec.entry !== 'WAIT' ? 'buy' :
+                                   rec.entry === 'WAIT' ? 'watch' : 'avoid';
+
+                    const actionText = rec.entry && rec.entry.includes('-') ? 'BUY' :
+                                       rec.entry === 'WAIT' ? 'WATCH' :
+                                       rec.entry === 'AVOID' ? 'AVOID' : rec.entry || 'UNKNOWN';
+
+                    const confidenceWidth = (rec.confidence || 0) * 10; // Scale 0-10 to 0-100%
+                    const riskLevel = (rec.risk || rec.risk_level || '').toLowerCase();
+                    const riskClass = riskLevel.includes('high') ? 'negative' :
+                                     riskLevel.includes('medium') ? '' : 'positive';
+
+                    html += `
+                        <div class="recommendation-card ${action}">
+                            <div class="rec-header">
+                                <div class="rec-ticker">${rec.ticker}</div>
+                                <div class="rec-action ${action}">${actionText}</div>
+                            </div>
+                            <div class="rec-details">
+                                <div>
+                                    <div class="rec-detail-label">Entry</div>
+                                    <div class="rec-detail-value">${rec.entry || 'N/A'}</div>
+                                </div>
+                                <div>
+                                    <div class="rec-detail-label">Target</div>
+                                    <div class="rec-detail-value positive">${rec.target || 'N/A'}</div>
+                                </div>
+                                <div>
+                                    <div class="rec-detail-label">Stop Loss</div>
+                                    <div class="rec-detail-value negative">${rec.stop || rec.stop_loss || 'N/A'}</div>
+                                </div>
+                            </div>
+                            <div class="rec-reasoning">${rec.reasoning || rec.analysis || 'No analysis available'}</div>
+                            <div class="rec-meta">
+                                <div>
+                                    <span class="${riskClass}">Risk: ${rec.risk || rec.risk_level || 'Unknown'}</span>
+                                </div>
+                                <div>
+                                    Confidence: ${rec.confidence || 0}/10
+                                    <span class="confidence-bar">
+                                        <span class="confidence-fill" style="width: ${confidenceWidth}%"></span>
+                                    </span>
+                                </div>
+                            </div>
+                            ${action === 'buy' ? `
+                            <button class="trade-button buy" onclick="showTradeModal('${rec.ticker}', '${rec.entry}', '${rec.target}', '${rec.stop || rec.stop_loss}')">
+                                Buy ${rec.ticker}
+                            </button>
+                            ` : ''}
+                        </div>
+                    `;
+                }
+
+                content.innerHTML = html;
+            } catch (e) {
+                content.innerHTML = '<div class="loading">Screener recommendations unavailable</div>';
+            }
+        }
+
+        // One-click trading functions
+        let pendingTrade = null;
+
+        function showTradeModal(ticker, entry, target, stop) {
+            // Validate entry price
+            if (!entry || entry === 'N/A' || entry === 'AVOID' || entry === 'WAIT') {
+                showToast('No valid entry price for this recommendation', 'error');
+                return;
+            }
+
+            // Parse entry price (take midpoint if range like "2.02-2.04")
+            let entryPrice = 0;
+            if (entry.includes('-')) {
+                const parts = entry.split('-');
+                const low = parseFloat(parts[0]);
+                const high = parseFloat(parts[1]);
+                if (isNaN(low) || isNaN(high)) {
+                    showToast('Invalid entry price format', 'error');
+                    return;
+                }
+                entryPrice = (low + high) / 2;
+            } else {
+                entryPrice = parseFloat(entry);
+                if (isNaN(entryPrice)) {
+                    showToast('Invalid entry price', 'error');
+                    return;
+                }
+            }
+
+            // Get current cash from account
+            fetch('/api/account')
+                .then(res => res.json())
+                .then(account => {
+                    const cash = account.cash || 0;
+
+                    // Calculate position size (10% of cash by default)
+                    const positionSize = cash * 0.10;
+                    const quantity = Math.floor(positionSize / entryPrice);
+                    const totalCost = quantity * entryPrice;
+
+                    if (quantity <= 0) {
+                        showToast('Insufficient cash for this trade', 'error');
+                        return;
+                    }
+
+                    // Store pending trade
+                    pendingTrade = {
+                        ticker: ticker,
+                        quantity: quantity,
+                        price: entryPrice,
+                        target: target,
+                        stop: stop,
+                        side: 'buy'
+                    };
+
+                    // Show modal
+                    const modalBody = document.getElementById('modalBody');
+                    modalBody.innerHTML = `
+                        <div class="modal-detail">
+                            <span class="modal-label">Symbol</span>
+                            <span class="modal-value">${ticker}</span>
+                        </div>
+                        <div class="modal-detail">
+                            <span class="modal-label">Quantity</span>
+                            <span class="modal-value">${quantity} shares</span>
+                        </div>
+                        <div class="modal-detail">
+                            <span class="modal-label">Entry Price</span>
+                            <span class="modal-value">${fmt(entryPrice)}</span>
+                        </div>
+                        <div class="modal-detail">
+                            <span class="modal-label">Total Cost</span>
+                            <span class="modal-value">${fmt(totalCost)}</span>
+                        </div>
+                        <div class="modal-detail">
+                            <span class="modal-label">Target</span>
+                            <span class="modal-value positive">${target}</span>
+                        </div>
+                        <div class="modal-detail">
+                            <span class="modal-label">Stop Loss</span>
+                            <span class="modal-value negative">${stop}</span>
+                        </div>
+                        <div class="modal-detail">
+                            <span class="modal-label">Available Cash</span>
+                            <span class="modal-value">${fmt(cash)}</span>
+                        </div>
+                    `;
+
+                    const confirmBtn = document.getElementById('confirmBtn');
+                    confirmBtn.textContent = 'Confirm Buy';
+                    confirmBtn.className = 'modal-button confirm';
+
+                    document.getElementById('tradeModal').classList.add('show');
+                })
+                .catch(err => {
+                    showToast('Error loading account data', 'error');
+                });
+        }
+
+        function showSetStopLossModal(ticker, currentPrice, avgPrice, currentStopLoss) {
+            const suggestedStopLoss = (avgPrice * 0.95).toFixed(2); // 5% below entry
+
+            // Show modal
+            const modalBody = document.getElementById('modalBody');
+            modalBody.innerHTML = `
+                <div class="modal-detail">
+                    <span class="modal-label">Symbol</span>
+                    <span class="modal-value">${ticker}</span>
+                </div>
+                <div class="modal-detail">
+                    <span class="modal-label">Current Price</span>
+                    <span class="modal-value">${fmt(currentPrice)}</span>
+                </div>
+                <div class="modal-detail">
+                    <span class="modal-label">Entry Price</span>
+                    <span class="modal-value">${fmt(avgPrice)}</span>
+                </div>
+                <div class="modal-detail">
+                    <span class="modal-label">Suggested Stop-Loss (5%)</span>
+                    <span class="modal-value negative">${fmt(suggestedStopLoss)}</span>
+                </div>
+                <div class="modal-detail">
+                    <span class="modal-label">Current Stop-Loss</span>
+                    <span class="modal-value">${currentStopLoss > 0 ? fmt(currentStopLoss) : 'Not Set'}</span>
+                </div>
+                <div class="modal-detail" style="grid-column: 1/-1; margin-top: 1rem;">
+                    <label style="color: #888; display: block; margin-bottom: 0.5rem;">Set Stop-Loss Price:</label>
+                    <input type="number" id="stopLossInput" step="0.01" min="0"
+                        value="${currentStopLoss > 0 ? currentStopLoss : suggestedStopLoss}"
+                        style="width: 100%; padding: 0.5rem; background: #1a1a2e; border: 1px solid #00d4ff; color: #fff; border-radius: 4px; font-size: 1rem;" />
+                    <div style="margin-top: 0.5rem;">
+                        <button onclick="document.getElementById('stopLossInput').value='${suggestedStopLoss}'"
+                            style="padding: 0.3rem 0.6rem; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin-right: 0.5rem;">Use 5%</button>
+                        <button onclick="document.getElementById('stopLossInput').value='${(avgPrice * 0.90).toFixed(2)}'"
+                            style="padding: 0.3rem 0.6rem; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer; margin-right: 0.5rem;">Use 10%</button>
+                        <button onclick="document.getElementById('stopLossInput').value='0'"
+                            style="padding: 0.3rem 0.6rem; background: #333; color: #fff; border: none; border-radius: 4px; cursor: pointer;">Remove</button>
+                    </div>
+                </div>
+            `;
+
+            // Store pending operation
+            pendingTrade = {
+                ticker: ticker,
+                operation: 'set_stop_loss'
+            };
+
+            const confirmBtn = document.getElementById('confirmBtn');
+            confirmBtn.textContent = 'Set Stop-Loss';
+            confirmBtn.className = 'modal-button confirm';
+            confirmBtn.onclick = executeSetStopLoss;
+
+            document.getElementById('tradeModal').classList.add('show');
+        }
+
+        async function executeSetStopLoss() {
+            if (!pendingTrade || pendingTrade.operation !== 'set_stop_loss') return;
+
+            const stopLossInput = document.getElementById('stopLossInput');
+            const stopLoss = parseFloat(stopLossInput.value) || 0;
+
+            const confirmBtn = document.getElementById('confirmBtn');
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Setting...';
+
+            try {
+                const response = await fetch('/api/positions/set-stop-loss', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        symbol: pendingTrade.ticker,
+                        stop_loss: stopLoss > 0 ? stopLoss : null
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.status === 'success') {
+                    showToast(result.message, 'success');
+                    closeTradeModal();
+
+                    // Refresh positions
+                    setTimeout(() => {
+                        loadPositions();
+                    }, 500);
+                } else {
+                    showToast(result.error || 'Failed to set stop-loss', 'error');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Set Stop-Loss';
+                }
+            } catch (error) {
+                showToast('Error setting stop-loss: ' + error.message, 'error');
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Set Stop-Loss';
+            }
+        }
+
+        function showSellModal(ticker, quantity, currentPrice, avgPrice) {
+            const pnl = (currentPrice - avgPrice) * quantity;
+            const pnlPct = ((currentPrice - avgPrice) / avgPrice * 100).toFixed(2);
+            const totalProceeds = currentPrice * quantity;
+
+            // Store pending trade
+            pendingTrade = {
+                ticker: ticker,
+                quantity: quantity,
+                price: currentPrice,
+                side: 'sell',
+                avgPrice: avgPrice,
+                pnl: pnl
+            };
+
+            // Show modal
+            const modalBody = document.getElementById('modalBody');
+            const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+            modalBody.innerHTML = `
+                <div class="modal-detail">
+                    <span class="modal-label">Symbol</span>
+                    <span class="modal-value">${ticker}</span>
+                </div>
+                <div class="modal-detail">
+                    <span class="modal-label">Quantity</span>
+                    <span class="modal-value">${quantity} shares</span>
+                </div>
+                <div class="modal-detail">
+                    <span class="modal-label">Current Price</span>
+                    <span class="modal-value">${fmt(currentPrice)}</span>
+                </div>
+                <div class="modal-detail">
+                    <span class="modal-label">Average Cost</span>
+                    <span class="modal-value">${fmt(avgPrice)}</span>
+                </div>
+                <div class="modal-detail">
+                    <span class="modal-label">Total Proceeds</span>
+                    <span class="modal-value">${fmt(totalProceeds)}</span>
+                </div>
+                <div class="modal-detail">
+                    <span class="modal-label">Profit/Loss</span>
+                    <span class="modal-value ${pnlClass}">${fmt(pnl)} (${pnlPct}%)</span>
+                </div>
+            `;
+
+            const confirmBtn = document.getElementById('confirmBtn');
+            confirmBtn.textContent = 'Confirm Sell';
+            confirmBtn.className = 'modal-button confirm';
+
+            document.getElementById('tradeModal').classList.add('show');
+        }
+
+        function closeTradeModal() {
+            document.getElementById('tradeModal').classList.remove('show');
+            pendingTrade = null;
+        }
+
+        async function executeTrade() {
+            if (!pendingTrade) return;
+
+            const side = pendingTrade.side || 'buy';
+            const confirmBtn = document.getElementById('confirmBtn');
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Placing Order...';
+
+            try {
+                const response = await fetch('/api/order', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        symbol: pendingTrade.ticker,
+                        side: side,
+                        quantity: pendingTrade.quantity,
+                        order_type: 'market'
+                    })
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.status === 'success') {
+                    const action = side === 'buy' ? 'bought' : 'sold';
+                    const pnlText = side === 'sell' && pendingTrade.pnl ? ` (P&L: ${fmt(pendingTrade.pnl)})` : '';
+                    showToast(`Successfully ${action} ${pendingTrade.quantity} shares of ${pendingTrade.ticker}!${pnlText}`, 'success');
+                    closeTradeModal();
+
+                    // Refresh account and positions
+                    setTimeout(() => {
+                        loadAccount();
+                        loadPositions();
+                        loadTrades();
+                    }, 1000);
+                } else {
+                    showToast(result.error || 'Trade failed', 'error');
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = side === 'buy' ? 'Confirm Buy' : 'Confirm Sell';
+                }
+            } catch (error) {
+                showToast('Error placing order: ' + error.message, 'error');
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = side === 'buy' ? 'Confirm Buy' : 'Confirm Sell';
+            }
+        }
+
+        function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type} show`;
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 4000);
+        }
+
+        // Load all data
+        loadAccount();
+        loadPositions();
+        loadTrades();
+        loadBotStatus();
+        loadStats();
+        loadRecommendations();
+
+        // Refresh every 30 seconds
+        setInterval(() => {
+            loadAccount();
+            loadPositions();
+            loadTrades();
+            loadRecommendations();
+        }, 30000);
+    </script>
+</body>
+</html>
