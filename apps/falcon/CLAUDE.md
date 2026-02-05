@@ -271,4 +271,392 @@ Storage: ~500MB/year compressed. Each file contains all tickers for that trading
 - **Web Scraping**: BeautifulSoup4, lxml
 - **Web Framework**: Flask 3.0.0, Flask-CORS
 - **Scheduling**: schedule, pytz
-- **Database**: SQLite3 (built-in)
+- **Database**: SQLite3 (built-in), PostgreSQL (optional)
+
+## Deployment
+
+### Service Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         CANARY                                  │
+│                    (falcon-canary.service)                      │
+│              Health monitoring & auto-recovery                  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │ monitors & restarts
+                              ▼
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  falcon-trader  │    │falcon-feedback  │    │ falcon-screener │
+│    .service     │    │  -loop.service  │    │   @*.service    │
+│                 │    │                 │    │ (morning/midday │
+│ Multi-strategy  │    │ Daily backtest  │    │   /evening)     │
+│  orchestrator   │    │   analysis      │    │                 │
+└────────┬────────┘    └────────┬────────┘    └────────┬────────┘
+         │                      │                      │
+         └──────────────────────┼──────────────────────┘
+                                │
+                                ▼
+                    ┌───────────────────────┐
+                    │   Database (SQLite/   │
+                    │     PostgreSQL)       │
+                    │  /var/lib/falcon/     │
+                    └───────────────────────┘
+```
+
+### Systemd Services
+
+| Service | Description | Resource Limits |
+|---------|-------------|-----------------|
+| `falcon-trader` | Main trading orchestrator | 2GB RAM, 75% CPU |
+| `falcon-feedback-loop` | Daily performance analysis | 1GB RAM, 50% CPU |
+| `falcon-screener@morning` | 4:00 AM ET screen | 1GB RAM, 50% CPU |
+| `falcon-screener@midday` | 10:00 AM ET screen | 1GB RAM, 50% CPU |
+| `falcon-screener@evening` | 7:00 PM ET screen | 1GB RAM, 50% CPU |
+| `falcon-canary` | Health monitoring daemon | 256MB RAM, 10% CPU |
+
+### Installation Paths (FHS-compliant)
+
+```
+/opt/falcon/              # Application code
+/etc/falcon/              # Configuration
+  └── falcon.env          # Environment variables
+/var/lib/falcon/          # Data (database, state)
+/var/log/falcon/          # Logs
+/var/cache/falcon/        # Cache
+```
+
+### Service Management
+
+```bash
+# View all falcon services
+systemctl list-units 'falcon-*' --all
+
+# Start/stop/restart a service
+sudo systemctl start falcon-trader
+sudo systemctl stop falcon-trader
+sudo systemctl restart falcon-trader
+
+# View logs
+sudo journalctl -u falcon-trader -f
+sudo journalctl -u falcon-canary -n 50
+
+# Enable/disable at boot
+sudo systemctl enable falcon-canary
+sudo systemctl disable falcon-canary
+```
+
+## Canary Health Monitoring
+
+The canary system (`canary.py`) provides automated health monitoring and recovery.
+
+### Features
+
+- **Network monitoring**: Connectivity checks, IP validation
+- **Service monitoring**: Systemd service status, HTTP health endpoints
+- **Auto-recovery**: Service restarts, network repair (DHCP, interface reset)
+- **Alerting**: Configurable alert command for notifications
+- **State persistence**: Tracks failures and restart counts across runs
+
+### Usage
+
+```bash
+# Check current status
+python3 canary.py --status
+
+# Run single check with repairs
+python3 canary.py
+
+# Run check without repairs
+python3 canary.py --check-only
+
+# Run as daemon (every 60 seconds)
+python3 canary.py --daemon --interval 60
+
+# JSON output
+python3 canary.py --status --json
+```
+
+### Configuration
+
+Environment variables in `/etc/falcon/falcon.env`:
+
+```bash
+# Network interface (leave empty for auto-detection)
+FALCON_NETWORK_INTERFACE=
+
+# Expected IP prefix for validation
+FALCON_EXPECTED_IP_PREFIX=192.168.
+
+# Optional alert command (receives: severity, message)
+FALCON_ALERT_COMMAND=/opt/falcon/scripts/send_alert.sh
+```
+
+### Recovery Actions
+
+| Issue | Action | Limits |
+|-------|--------|--------|
+| Service down | Restart via systemctl | Max 3 attempts, 5min cooldown |
+| Network down | Interface restart → DHCP renewal | Max 3 attempts, 5min cooldown |
+| Persistent failure | Send alert | After 3 consecutive failures |
+
+## Database Schema
+
+### SQLite/PostgreSQL Tables
+
+#### `account`
+| Column | Type | Description |
+|--------|------|-------------|
+| id | INTEGER | Primary key |
+| cash | DECIMAL(15,2) | Available cash |
+| initial_balance | DECIMAL(15,2) | Starting balance |
+| last_updated | TIMESTAMP | Last update time |
+
+#### `positions`
+| Column | Type | Description |
+|--------|------|-------------|
+| symbol | VARCHAR(20) | Ticker symbol (PK) |
+| quantity | DECIMAL(15,4) | Shares held |
+| entry_price | DECIMAL(15,2) | Average entry price |
+| entry_date | TIMESTAMP | Position open date |
+| stop_loss | DECIMAL(15,2) | Stop-loss price |
+| last_updated | TIMESTAMP | Last update time |
+
+#### `orders`
+| Column | Type | Description |
+|--------|------|-------------|
+| id | SERIAL | Primary key |
+| symbol | VARCHAR(20) | Ticker symbol |
+| side | VARCHAR(10) | BUY or SELL |
+| quantity | DECIMAL(15,4) | Order quantity |
+| price | DECIMAL(15,2) | Execution price |
+| timestamp | TIMESTAMP | Order time |
+| pnl | DECIMAL(15,2) | Profit/loss (sells only) |
+| strategy | VARCHAR(50) | Strategy name |
+
+#### `performance`
+| Column | Type | Description |
+|--------|------|-------------|
+| timestamp | TIMESTAMP | Record time (PK) |
+| total_value | DECIMAL(15,2) | Total portfolio value |
+| cash | DECIMAL(15,2) | Cash balance |
+| positions_value | DECIMAL(15,2) | Value of holdings |
+
+#### `screener_profiles`
+| Column | Type | Description |
+|--------|------|-------------|
+| id | SERIAL | Primary key |
+| name | VARCHAR(100) | Profile name (unique) |
+| theme | VARCHAR(50) | momentum/earnings/seasonal |
+| finviz_filters | JSONB | Finviz filter parameters |
+| weights | JSONB | Scoring weights |
+| enabled | BOOLEAN | Is profile active |
+| performance_score | DECIMAL(5,4) | Historical accuracy |
+
+### PostgreSQL Support
+
+The system supports both SQLite (default) and PostgreSQL:
+
+```bash
+# Environment variables for PostgreSQL
+DB_TYPE=postgresql
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=falcon
+DB_USER=falcon
+DB_PASSWORD=your_password
+```
+
+PostgreSQL features:
+- Connection pooling (1-10 connections)
+- Automatic retry with exponential backoff (5 attempts, 1-30s delay)
+- Health check and reconnection methods
+
+## API Response Examples
+
+### GET /api/account
+```json
+{
+  "totalValue": 10523.45,
+  "cash": 5234.12,
+  "positionsValue": 5289.33,
+  "initialBalance": 10000.0
+}
+```
+
+### GET /api/positions
+```json
+[
+  {
+    "symbol": "AAPL",
+    "quantity": 10,
+    "avgPrice": 185.50,
+    "currentPrice": 187.25,
+    "stopLoss": 180.00
+  }
+]
+```
+
+### GET /api/trades/summary
+```json
+{
+  "totalTrades": 45,
+  "winningTrades": 28,
+  "losingTrades": 17,
+  "winRate": 62.2,
+  "bestTrade": 523.40,
+  "worstTrade": -187.20,
+  "totalPnL": 1847.33
+}
+```
+
+### GET /api/recommendations
+```json
+{
+  "status": "success",
+  "timestamp": "2026-02-05T09:15:00",
+  "screen_type": "morning",
+  "total_stocks_screened": 127,
+  "recommendations": [
+    {
+      "symbol": "XYZ",
+      "score": 0.85,
+      "reasons": ["high relative volume", "breaking resistance"],
+      "entry_price": 45.20,
+      "target_price": 48.50
+    }
+  ]
+}
+```
+
+### POST /api/order
+Request:
+```json
+{
+  "symbol": "AAPL",
+  "side": "buy",
+  "quantity": 10,
+  "order_type": "market"
+}
+```
+Response:
+```json
+{
+  "status": "success",
+  "order_id": 123,
+  "symbol": "AAPL",
+  "side": "buy",
+  "quantity": 10,
+  "filled_price": 185.50
+}
+```
+
+## Troubleshooting
+
+### Service Won't Start
+
+```bash
+# Check service status and logs
+sudo systemctl status falcon-trader
+sudo journalctl -u falcon-trader -n 50 --no-pager
+
+# Common issues:
+# 1. Missing environment file
+ls -la /etc/falcon/falcon.env
+
+# 2. Wrong permissions
+sudo chown -R falcon:falcon /opt/falcon /var/lib/falcon
+
+# 3. Missing Python venv
+ls -la /opt/falcon/venv/bin/python3
+```
+
+### Database Connection Errors
+
+```bash
+# SQLite: Check file permissions
+ls -la /var/lib/falcon/paper_trading.db
+
+# PostgreSQL: Test connection
+psql -h localhost -U falcon -d falcon -c "SELECT 1"
+
+# Check database type in config
+grep DB_TYPE /etc/falcon/falcon.env
+```
+
+### Network Issues
+
+```bash
+# Check canary status
+python3 /opt/falcon/canary.py --status
+
+# Manual network check
+ping -c 3 8.8.8.8
+ip addr show
+
+# Force network repair
+python3 /opt/falcon/canary.py  # runs repair automatically
+```
+
+### API Not Responding
+
+```bash
+# Check if dashboard is running
+curl http://localhost:5000/health
+
+# Check port binding
+ss -tlnp | grep 5000
+
+# Restart dashboard
+sudo systemctl restart falcon-dashboard
+```
+
+### Screener Not Finding Stocks
+
+```bash
+# Check API keys are set
+grep -E '(CLAUDE|OPENAI|PERPLEXITY|FINVIZ)' /etc/falcon/falcon.env
+
+# Run test screen
+python3 ai_stock_screener.py --test
+
+# Check screened_stocks.json
+cat screened_stocks.json | python3 -m json.tool | head -50
+```
+
+### High Memory Usage
+
+```bash
+# Check service memory
+systemctl status falcon-trader | grep Memory
+
+# View resource limits
+systemctl show falcon-trader | grep -E '(Memory|CPU)'
+
+# Restart to clear memory
+sudo systemctl restart falcon-trader
+```
+
+### Logs Location
+
+| Log | Location |
+|-----|----------|
+| Service logs | `journalctl -u falcon-*` |
+| Canary logs | `/var/log/falcon/canary.log` |
+| Application logs | stdout → journald |
+
+### Recovery Commands
+
+```bash
+# Full service restart
+sudo systemctl restart falcon-trader falcon-feedback-loop
+
+# Reinitialize database (CAUTION: loses data)
+python3 db_manager.py --reset
+
+# Force canary repair cycle
+python3 /opt/falcon/canary.py
+
+# Check all services health
+systemctl list-units 'falcon-*' --state=failed
+```
