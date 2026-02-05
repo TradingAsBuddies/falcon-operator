@@ -346,6 +346,30 @@ sudo systemctl enable falcon-canary
 sudo systemctl disable falcon-canary
 ```
 
+### Security: Privilege Separation
+
+All services run as the unprivileged `falcon` user, not root. This follows the principle of least privilege.
+
+| Service | User | Privileged Operations |
+|---------|------|----------------------|
+| `falcon-trader` | falcon | None |
+| `falcon-feedback-loop` | falcon | None |
+| `falcon-screener@*` | falcon | None |
+| `falcon-canary` | falcon | sudo for service restarts, network repair |
+| `falcon-dashboard` | falcon | None |
+
+**Canary sudo permissions** (`/etc/sudoers.d/falcon-canary`):
+```
+falcon ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart falcon-*
+falcon ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart networking
+falcon ALL=(ALL) NOPASSWD: /usr/sbin/ip link set * down
+falcon ALL=(ALL) NOPASSWD: /usr/sbin/ip link set * up
+falcon ALL=(ALL) NOPASSWD: /usr/sbin/dhclient *
+falcon ALL=(ALL) NOPASSWD: /usr/bin/nmcli connection *
+```
+
+**Verification**: Run `tests/unit/test_security.py` to verify no services run as root.
+
 ## Canary Health Monitoring
 
 The canary system (`canary.py`) provides automated health monitoring and recovery.
