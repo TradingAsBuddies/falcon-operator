@@ -166,7 +166,7 @@ From `falcon-operator/`:
 
 ## Database
 
-### PostgreSQL (falcon-db: 192.168.1.194)
+### PostgreSQL (falcon-db: 192.168.1.106)
 - `trading` - Main trading data
 - `finviz` - Screening data (filings, news, outcomes, picks, scans)
 

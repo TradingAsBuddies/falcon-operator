@@ -10,8 +10,8 @@ hosts:
     description: Control center and primary storage
 
   falcon-db:
-    address: 192.168.1.194
-    user: ospartners
+    address: 192.168.1.106
+    user: davdunc
     hostname: lake-raspbian
     role: database
     services:

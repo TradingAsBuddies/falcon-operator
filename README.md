@@ -20,7 +20,7 @@ See [docs/WORKFLOW.md](docs/WORKFLOW.md) for detailed workflow documentation.
 │                                                                         │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐      │
 │  │  falcon-control  │  │    falcon-db     │  │  falcon-compute  │      │
-│  │    (this Pi)     │  │  192.168.1.194   │  │  192.168.1.162   │      │
+│  │    (this Pi)     │  │  192.168.1.106   │  │  192.168.1.162   │      │
 │  │                  │  │                  │  │                  │      │
 │  │  • Orchestration │  │  • PostgreSQL    │  │  • Dashboard     │      │
 │  │  • Code storage  │  │  • trading db    │  │  • Screener      │      │
@@ -37,7 +37,7 @@ See [docs/WORKFLOW.md](docs/WORKFLOW.md) for detailed workflow documentation.
 | Alias | Hostname | IP | User | Role | Storage |
 |-------|----------|-----|------|------|---------|
 | falcon-control | raspberrypi | localhost | davdunc | Orchestration | 235GB NVMe (208GB free) |
-| falcon-db | lake-raspbian | 192.168.1.194 | ospartners | Database | 28GB SD (20GB free) |
+| falcon-db | lake-raspbian | 192.168.1.106 | davdunc | Database | 28GB SD (20GB free) |
 | falcon-compute | raspberrypi | 192.168.1.162 | ospartners | Compute/Web | 28GB SD (9.5GB free) |
 
 ## Running Services
@@ -53,7 +53,7 @@ See [docs/WORKFLOW.md](docs/WORKFLOW.md) for detailed workflow documentation.
 | Stop-Loss Monitor | `stop_loss_monitor.py` | - | Position monitoring |
 | nginx | - | 80/443 | Reverse proxy to Flask |
 
-### falcon-db (192.168.1.194)
+### falcon-db (192.168.1.106)
 
 | Service | Port | Description |
 |---------|------|-------------|

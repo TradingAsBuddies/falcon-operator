@@ -23,10 +23,10 @@ echo "  Disk: $(df -h / | tail -1 | awk '{print $4 " free of " $2}')"
 echo ""
 
 # falcon-db
-echo -e "${GREEN}▶ falcon-db (192.168.1.194)${NC}"
-if ssh -o ConnectTimeout=3 -o BatchMode=yes ospartners@192.168.1.194 "echo ok" &>/dev/null; then
+echo -e "${GREEN}▶ falcon-db (192.168.1.106)${NC}"
+if ssh -o ConnectTimeout=3 -o BatchMode=yes davdunc@192.168.1.106 "echo ok" &>/dev/null; then
     echo -e "  Status: ${GREEN}ONLINE${NC}"
-    ssh ospartners@192.168.1.194 "
+    ssh davdunc@192.168.1.106 "
         echo \"  Hostname: \$(hostname)\"
         echo \"  Disk: \$(df -h / | tail -1 | awk '{print \$4 \" free of \" \$2}')\"
 

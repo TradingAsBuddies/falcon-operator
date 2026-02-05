@@ -18,7 +18,7 @@ from datetime import datetime
 # PostgreSQL configuration
 POSTGRES_CONFIG = {
     'db_type': 'postgresql',
-    'db_host': '192.168.1.194',
+    'db_host': '192.168.1.106',
     'db_port': 5432,
     'db_name': 'falcon',
     'db_user': 'falcon',

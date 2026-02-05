@@ -12,9 +12,9 @@ NC='\033[0m'
 echo -e "${GREEN}=== Falcon Service User Setup ===${NC}"
 echo ""
 
-# falcon-db (192.168.1.194)
-echo -e "${YELLOW}Setting up falcon user on falcon-db (192.168.1.194)...${NC}"
-ssh ospartners@192.168.1.194 << 'EOF'
+# falcon-db (192.168.1.106)
+echo -e "${YELLOW}Setting up falcon user on falcon-db (192.168.1.106)...${NC}"
+ssh davdunc@192.168.1.106 << 'EOF'
     # Create falcon system user if it doesn't exist
     if ! id falcon &>/dev/null; then
         sudo useradd --system --no-create-home --shell /usr/sbin/nologin falcon

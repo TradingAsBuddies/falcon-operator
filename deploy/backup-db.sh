@@ -7,8 +7,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BACKUP_DIR="$PROJECT_DIR/backups"
-REMOTE_USER="ospartners"
-REMOTE_HOST="192.168.1.194"
+REMOTE_USER="davdunc"
+REMOTE_HOST="192.168.1.106"
 DATE=$(date +%Y%m%d_%H%M%S)
 
 # Colors
