@@ -1,26 +1,30 @@
 [Unit]
 Description=Falcon Strategy Orchestrator - Automated Trading System
-After=network.target
+After=network-online.target falcon-dashboard.service
 Wants=network-online.target
+Requires=falcon-dashboard.service
 
 [Service]
 Type=simple
 User=falcon
 Group=falcon
-WorkingDirectory=/opt/falcon
 
-# Load environment variables
-EnvironmentFile=/opt/falcon/.env
-
-# Force unbuffered Python output for proper logging
+# Environment - paths can be overridden in EnvironmentFile
+Environment="FALCON_HOME=/opt/falcon"
+Environment="FALCON_PYTHON=/opt/falcon/venv/bin/python3"
 Environment="PYTHONUNBUFFERED=1"
+Environment="FALCON_ENV=production"
+EnvironmentFile=-/etc/falcon/falcon.env
 
-# Run the orchestrator
-ExecStart=/usr/bin/python3 /opt/falcon/strategy_orchestrator.py
+# Start command using configured paths
+ExecStart=/bin/bash -c '${FALCON_PYTHON} ${FALCON_HOME}/strategy_orchestrator.py'
+WorkingDirectory=/opt/falcon
 
 # Restart policy
 Restart=always
 RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 # Logging
 StandardOutput=journal
@@ -32,6 +36,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
+ReadWritePaths=/opt/falcon
 ReadWritePaths=/var/lib/falcon
 
 # Resource limits

@@ -8,14 +8,16 @@ Requires=falcon-dashboard.service
 Type=simple
 User=falcon
 Group=falcon
-WorkingDirectory=/home/ospartners/src/falcon
 
-# Environment
-EnvironmentFile=/opt/falcon/.env
+# Environment - paths can be overridden in EnvironmentFile
+Environment="FALCON_HOME=/opt/falcon"
+Environment="FALCON_PYTHON=/opt/falcon/venv/bin/python3"
 Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=-/etc/falcon/falcon.env
 
-# Start command
-ExecStart=/home/ospartners/src/falcon/backtest/bin/python3 /home/ospartners/src/falcon/stop_loss_monitor.py
+# Start command using configured paths
+ExecStart=/bin/bash -c '${FALCON_PYTHON} ${FALCON_HOME}/stop_loss_monitor.py'
+WorkingDirectory=/opt/falcon
 
 # Restart policy
 Restart=always
@@ -33,7 +35,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/ospartners/src/falcon
+ReadWritePaths=/opt/falcon
 ReadWritePaths=/var/lib/falcon
 
 # Resource limits

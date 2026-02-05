@@ -1,27 +1,32 @@
 [Unit]
 Description=Falcon Multi-Strategy Orchestrator - Continuous Trading Automation
-Documentation=file:///home/ospartners/src/falcon/ORCHESTRATOR_COMPLETE.md
-After=network.target falcon-screener.service
+After=network-online.target falcon-screener.service falcon-dashboard.service
 Wants=network-online.target
+Requires=falcon-dashboard.service
 
 [Service]
 Type=simple
-User=ospartners
-Group=ospartners
-WorkingDirectory=/home/ospartners/src/falcon
+User=falcon
+Group=falcon
 
-# Load environment variables (API keys, etc.)
-EnvironmentFile=/home/ospartners/.local/.env
+# Environment - paths can be overridden in EnvironmentFile
+Environment="FALCON_HOME=/opt/falcon"
+Environment="FALCON_PYTHON=/opt/falcon/venv/bin/python3"
 Environment="PYTHONUNBUFFERED=1"
 Environment="PYTHONIOENCODING=utf-8"
 Environment="LC_ALL=C.UTF-8"
+Environment="FALCON_ENV=production"
+EnvironmentFile=-/etc/falcon/falcon.env
 
-# Run the orchestrator daemon
-ExecStart=/home/ospartners/src/falcon/backtest/bin/python3 -u /home/ospartners/src/falcon/run_orchestrator.py
+# Start command using configured paths
+ExecStart=/bin/bash -c '${FALCON_PYTHON} -u ${FALCON_HOME}/run_orchestrator.py'
+WorkingDirectory=/opt/falcon
 
 # Restart policy - always restart if it fails
 Restart=always
 RestartSec=30
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 # Logging to systemd journal
 StandardOutput=journal
@@ -33,14 +38,15 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/ospartners/src/falcon
+ReadWritePaths=/opt/falcon
+ReadWritePaths=/var/lib/falcon
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true
 
 # Resource limits (prevent runaway resource usage)
-MemoryMax=1G
-CPUQuota=50%
+MemoryMax=2G
+CPUQuota=75%
 TasksMax=100
 
 # Process management
