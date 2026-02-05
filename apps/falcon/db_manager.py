@@ -7,11 +7,17 @@ Supports SQLite (default) and PostgreSQL
 import os
 import sqlite3
 import datetime
+import time
 from typing import Any, Dict, List, Optional, Tuple
 from contextlib import contextmanager
 import logging
 
 logger = logging.getLogger(__name__)
+
+# PostgreSQL retry configuration
+PG_MAX_RETRIES = 5
+PG_BASE_DELAY = 1.0  # seconds
+PG_MAX_DELAY = 30.0  # seconds
 
 
 class DatabaseManager:
@@ -71,24 +77,40 @@ class DatabaseManager:
         }
 
     def _init_postgres_pool(self):
-        """Initialize PostgreSQL connection pool"""
-        from psycopg2 import pool
+        """Initialize PostgreSQL connection pool with retry logic"""
+        from psycopg2 import pool, OperationalError
 
-        self.pool = pool.ThreadedConnectionPool(
-            minconn=1,
-            maxconn=10,
-            host=self.config['db_host'],
-            port=self.config['db_port'],
-            database=self.config['db_name'],
-            user=self.config['db_user'],
-            password=self.config['db_password']
-        )
-        logger.info("PostgreSQL connection pool initialized")
+        last_error = None
+        for attempt in range(PG_MAX_RETRIES):
+            try:
+                self.pool = pool.ThreadedConnectionPool(
+                    minconn=1,
+                    maxconn=10,
+                    host=self.config['db_host'],
+                    port=self.config['db_port'],
+                    database=self.config['db_name'],
+                    user=self.config['db_user'],
+                    password=self.config['db_password']
+                )
+                logger.info("PostgreSQL connection pool initialized")
+                return
+            except OperationalError as e:
+                last_error = e
+                delay = min(PG_BASE_DELAY * (2 ** attempt), PG_MAX_DELAY)
+                logger.warning(
+                    f"PostgreSQL connection failed (attempt {attempt + 1}/{PG_MAX_RETRIES}): {e}. "
+                    f"Retrying in {delay:.1f}s..."
+                )
+                if attempt < PG_MAX_RETRIES - 1:
+                    time.sleep(delay)
+
+        logger.error(f"Failed to connect to PostgreSQL after {PG_MAX_RETRIES} attempts")
+        raise last_error
 
     @contextmanager
     def get_connection(self):
         """
-        Get database connection as context manager
+        Get database connection as context manager with retry logic for PostgreSQL
 
         Usage:
             with db.get_connection() as conn:
@@ -103,21 +125,58 @@ class DatabaseManager:
             finally:
                 conn.close()
         else:  # postgresql
-            conn = self.pool.getconn()
-            try:
-                yield conn
-            finally:
-                self.pool.putconn(conn)
+            conn = None
+            last_error = None
+
+            for attempt in range(PG_MAX_RETRIES):
+                try:
+                    # Try to get connection from pool
+                    conn = self.pool.getconn()
+
+                    # Test connection is alive
+                    conn.cursor().execute("SELECT 1")
+
+                    try:
+                        yield conn
+                    finally:
+                        self.pool.putconn(conn)
+                    return
+
+                except self.psycopg2.OperationalError as e:
+                    last_error = e
+                    if conn:
+                        try:
+                            self.pool.putconn(conn, close=True)
+                        except Exception:
+                            pass
+
+                    delay = min(PG_BASE_DELAY * (2 ** attempt), PG_MAX_DELAY)
+                    logger.warning(
+                        f"PostgreSQL connection error (attempt {attempt + 1}/{PG_MAX_RETRIES}): {e}. "
+                        f"Retrying in {delay:.1f}s..."
+                    )
+
+                    if attempt < PG_MAX_RETRIES - 1:
+                        time.sleep(delay)
+                        # Try to reinitialize pool if connections are stale
+                        try:
+                            self._init_postgres_pool()
+                        except Exception as pool_error:
+                            logger.warning(f"Pool reinitialization failed: {pool_error}")
+
+            logger.error(f"Failed to get PostgreSQL connection after {PG_MAX_RETRIES} attempts")
+            raise last_error
 
     def execute(self, query: str, params: Optional[Tuple] = None,
-                fetch: str = 'none') -> Any:
+                fetch: str = 'none', _retry_count: int = 0) -> Any:
         """
-        Execute a query
+        Execute a query with automatic retry on transient errors
 
         Args:
             query: SQL query (use %s for placeholders in both SQLite and PostgreSQL)
             params: Query parameters
             fetch: 'none', 'one', 'all'
+            _retry_count: Internal retry counter (do not set manually)
 
         Returns:
             Query results based on fetch parameter
@@ -127,29 +186,49 @@ class DatabaseManager:
         if self.db_type == 'sqlite':
             query = query.replace('%s', '?')
 
-        with self.get_connection() as conn:
-            # Use RealDictCursor for PostgreSQL to get dict-like rows
-            if self.db_type == 'postgresql':
-                from psycopg2.extras import RealDictCursor
-                cursor = conn.cursor(cursor_factory=RealDictCursor)
-            else:
-                cursor = conn.cursor()
+        try:
+            with self.get_connection() as conn:
+                # Use RealDictCursor for PostgreSQL to get dict-like rows
+                if self.db_type == 'postgresql':
+                    from psycopg2.extras import RealDictCursor
+                    cursor = conn.cursor(cursor_factory=RealDictCursor)
+                else:
+                    cursor = conn.cursor()
 
-            if params:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
+                if params:
+                    cursor.execute(query, params)
+                else:
+                    cursor.execute(query)
 
-            result = None
-            if fetch == 'one':
-                result = cursor.fetchone()
-            elif fetch == 'all':
-                result = cursor.fetchall()
-            elif fetch == 'none':
-                conn.commit()
-                result = cursor.lastrowid if self.db_type == 'sqlite' else cursor.rowcount
+                result = None
+                if fetch == 'one':
+                    result = cursor.fetchone()
+                elif fetch == 'all':
+                    result = cursor.fetchall()
+                elif fetch == 'none':
+                    conn.commit()
+                    result = cursor.lastrowid if self.db_type == 'sqlite' else cursor.rowcount
 
-            return result
+                return result
+
+        except Exception as e:
+            # For PostgreSQL, retry on connection-related errors
+            if self.db_type == 'postgresql' and _retry_count < PG_MAX_RETRIES:
+                error_str = str(e).lower()
+                # Check for transient/connection errors
+                transient_errors = [
+                    'connection', 'timeout', 'closed', 'terminated',
+                    'server closed', 'ssl', 'network', 'reset'
+                ]
+                if any(err in error_str for err in transient_errors):
+                    delay = min(PG_BASE_DELAY * (2 ** _retry_count), PG_MAX_DELAY)
+                    logger.warning(
+                        f"Query failed with transient error (attempt {_retry_count + 1}/{PG_MAX_RETRIES}): {e}. "
+                        f"Retrying in {delay:.1f}s..."
+                    )
+                    time.sleep(delay)
+                    return self.execute(query, params, fetch, _retry_count + 1)
+            raise
 
     def executemany(self, query: str, params_list: List[Tuple]) -> int:
         """Execute a query multiple times with different parameters"""
@@ -557,6 +636,45 @@ class DatabaseManager:
                 return float(result.get('initial_balance', 10000.0) or 10000.0)
             return float(result[0]) if result[0] else 10000.0
         return 10000.0  # Default fallback
+
+    def health_check(self) -> bool:
+        """
+        Check if database connection is healthy
+
+        Returns:
+            True if connection is working, False otherwise
+        """
+        try:
+            result = self.execute('SELECT 1', fetch='one')
+            return result is not None
+        except Exception as e:
+            logger.warning(f"Database health check failed: {e}")
+            return False
+
+    def reconnect(self) -> bool:
+        """
+        Attempt to reconnect to the database (PostgreSQL only)
+
+        Returns:
+            True if reconnection successful, False otherwise
+        """
+        if self.db_type != 'postgresql':
+            return True  # SQLite doesn't need reconnection
+
+        try:
+            # Close existing pool
+            if self.pool:
+                try:
+                    self.pool.closeall()
+                except Exception:
+                    pass
+
+            # Reinitialize pool
+            self._init_postgres_pool()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to reconnect to PostgreSQL: {e}")
+            return False
 
     def close(self):
         """Close database connections"""
