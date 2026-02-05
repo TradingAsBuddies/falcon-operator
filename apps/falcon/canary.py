@@ -56,6 +56,13 @@ CONFIG = {
     # Health endpoints (empty if no HTTP services to check)
     'health_endpoints': [],
 
+    # Web endpoints to verify (host, port, path, expected_status)
+    'web_endpoints': [
+        ('192.168.1.162', 443, '/strategies', 200),
+        ('192.168.1.162', 443, '/api/account', 200),
+        ('192.168.1.162', 443, '/health', 200),
+    ],
+
     # Network targets for connectivity checks
     'network_targets': [
         ('8.8.8.8', 53),        # Google DNS
@@ -346,6 +353,46 @@ class FalconCanary:
 
         return True, status
 
+    def check_web_endpoints(self) -> Dict[str, dict]:
+        """Check configured web endpoints are accessible"""
+        import ssl
+        import urllib.request
+
+        results = {}
+        # Create SSL context that doesn't verify certificates (for self-signed)
+        ssl_context = ssl.create_default_context()
+        ssl_context.check_hostname = False
+        ssl_context.verify_mode = ssl.CERT_NONE
+
+        for endpoint in self.config.get('web_endpoints', []):
+            host, port, path, expected_status = endpoint
+            url = f"https://{host}:{port}{path}" if port == 443 else f"http://{host}:{port}{path}"
+
+            try:
+                req = urllib.request.Request(url, method='GET')
+                req.add_header('User-Agent', 'FalconCanary/1.0')
+                with urllib.request.urlopen(req, timeout=10, context=ssl_context) as response:
+                    actual_status = response.status
+                    healthy = actual_status == expected_status
+                    results[f"{host}{path}"] = {
+                        'url': url,
+                        'healthy': healthy,
+                        'status_code': actual_status,
+                        'expected': expected_status,
+                        'error': None if healthy else f"Expected {expected_status}, got {actual_status}"
+                    }
+            except Exception as e:
+                results[f"{host}{path}"] = {
+                    'url': url,
+                    'healthy': False,
+                    'status_code': None,
+                    'expected': expected_status,
+                    'error': str(e)
+                }
+                logger.warning(f"Web endpoint {url} check failed: {e}")
+
+        return results
+
     def restart_service(self, service: str) -> bool:
         """Restart a systemd service"""
         logger.info(f"Restarting service: {service}")
@@ -431,6 +478,7 @@ class FalconCanary:
             'timestamp': datetime.now().isoformat(),
             'network': {'healthy': False, 'ip': ''},
             'services': {},
+            'web_endpoints': {},
             'repairs_attempted': [],
             'overall_healthy': True,
         }
@@ -486,6 +534,15 @@ class FalconCanary:
                 }
                 if not healthy:
                     results['overall_healthy'] = False
+
+            # Web endpoint checks
+            if self.config.get('web_endpoints'):
+                logger.info("Checking web endpoints...")
+                results['web_endpoints'] = self.check_web_endpoints()
+                for endpoint, status in results['web_endpoints'].items():
+                    if not status['healthy']:
+                        logger.warning(f"Web endpoint unhealthy: {endpoint} - {status['error']}")
+                        results['overall_healthy'] = False
         else:
             logger.warning("Skipping service checks - network is down")
             for service in self.config['services']:
@@ -577,6 +634,14 @@ def main():
                 print(f"  {name}: {health}")
                 if svc.get('last_error'):
                     print(f"    Error: {svc['last_error']}")
+            if results.get('web_endpoints'):
+                print(f"\nWeb Endpoints:")
+                for endpoint, status in results['web_endpoints'].items():
+                    health = "OK" if status['healthy'] else "FAILED"
+                    code = status.get('status_code', 'N/A')
+                    print(f"  {endpoint}: {health} (HTTP {code})")
+                    if status.get('error'):
+                        print(f"    Error: {status['error']}")
             if results['repairs_attempted']:
                 print(f"\nRepairs Attempted: {', '.join(results['repairs_attempted'])}")
             print(f"{'='*50}\n")
