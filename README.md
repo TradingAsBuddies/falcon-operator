@@ -37,7 +37,7 @@ See [docs/WORKFLOW.md](docs/WORKFLOW.md) for detailed workflow documentation.
 | Alias | Hostname | IP | User | Role | Storage |
 |-------|----------|-----|------|------|---------|
 | falcon-control | raspberrypi | localhost | davdunc | Orchestration | 235GB NVMe (208GB free) |
-| falcon-db | lake-raspbian | 192.168.1.106 | davdunc | Database | 28GB SD (20GB free) |
+| falcon-db | tiro-ai-hat | 192.168.1.106 | davdunc | Database | 117GB SD (99GB free) |
 | falcon-compute | raspberrypi | 192.168.1.162 | ospartners | Compute/Web | 28GB SD (9.5GB free) |
 
 ## Running Services
