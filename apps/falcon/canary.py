@@ -58,9 +58,13 @@ CONFIG = {
 
     # Web endpoints to verify (host, port, path, expected_status)
     'web_endpoints': [
+        ('192.168.1.162', 443, '/health', 200),
         ('192.168.1.162', 443, '/strategies', 200),
         ('192.168.1.162', 443, '/api/account', 200),
-        ('192.168.1.162', 443, '/health', 200),
+        ('192.168.1.162', 443, '/api/positions', 200),
+        ('192.168.1.162', 443, '/api/recommendations', 200),
+        ('192.168.1.162', 443, '/api/trades/summary', 200),
+        ('192.168.1.162', 443, '/api/bot/status', 200),
     ],
 
     # Network targets for connectivity checks
