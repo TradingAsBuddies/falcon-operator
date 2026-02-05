@@ -1,0 +1,29 @@
+[Unit]
+Description=Falcon Canary - Health Check (One-shot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+
+# Environment
+Environment="FALCON_HOME=/opt/falcon"
+Environment="FALCON_PYTHON=/opt/falcon/venv/bin/python3"
+Environment="PYTHONUNBUFFERED=1"
+Environment="FALCON_NETWORK_INTERFACE=eth0"
+Environment="FALCON_EXPECTED_IP_PREFIX=192.168.1."
+EnvironmentFile=-/etc/falcon/falcon.env
+
+# Run single check with repairs
+ExecStart=/bin/bash -c '${FALCON_PYTHON} ${FALCON_HOME}/canary.py'
+WorkingDirectory=/opt/falcon
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=falcon-canary
+
+[Install]
+WantedBy=multi-user.target

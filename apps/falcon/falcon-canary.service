@@ -1,0 +1,45 @@
+[Unit]
+Description=Falcon Canary - Health Monitoring and Auto-Recovery
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+
+# Environment - paths can be overridden in EnvironmentFile
+Environment="FALCON_HOME=/opt/falcon"
+Environment="FALCON_PYTHON=/opt/falcon/venv/bin/python3"
+Environment="PYTHONUNBUFFERED=1"
+
+# Network configuration for canary
+Environment="FALCON_NETWORK_INTERFACE=eth0"
+Environment="FALCON_EXPECTED_IP_PREFIX=192.168.1."
+
+# Optional: Alert command (receives: severity, message)
+# Environment="FALCON_ALERT_COMMAND=/opt/falcon/scripts/send_alert.sh"
+
+EnvironmentFile=-/etc/falcon/falcon.env
+
+# Start command - run as daemon
+ExecStart=/bin/bash -c '${FALCON_PYTHON} ${FALCON_HOME}/canary.py --daemon --interval 60'
+WorkingDirectory=/opt/falcon
+
+# Restart policy
+Restart=always
+RestartSec=30
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=falcon-canary
+
+# Resource limits
+MemoryMax=256M
+CPUQuota=10%
+
+[Install]
+WantedBy=multi-user.target

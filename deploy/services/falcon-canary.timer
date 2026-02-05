@@ -1,0 +1,17 @@
+[Unit]
+Description=Falcon Canary - Periodic Health Check Timer
+Documentation=Run health checks every minute as an alternative to daemon mode
+
+[Timer]
+# Run every minute
+OnBootSec=30
+OnUnitActiveSec=60
+
+# Randomize to prevent thundering herd
+RandomizedDelaySec=5
+
+# Persistent ensures missed runs are caught up
+Persistent=true
+
+[Install]
+WantedBy=timers.target
