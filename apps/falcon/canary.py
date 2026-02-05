@@ -49,15 +49,12 @@ CONFIG = {
 
     # Services to monitor
     'services': [
-        'falcon-dashboard',
-        'falcon-orchestrator',
-        'falcon-screener',
+        'falcon-trader',
+        'falcon-feedback-loop',
     ],
 
-    # Health endpoints
-    'health_endpoints': [
-        ('localhost', 5000, '/health'),  # Dashboard
-    ],
+    # Health endpoints (empty if no HTTP services to check)
+    'health_endpoints': [],
 
     # Network targets for connectivity checks
     'network_targets': [
@@ -66,8 +63,9 @@ CONFIG = {
     ],
 
     # Expected network interface and IP (set via environment or config file)
-    'expected_interface': os.getenv('FALCON_NETWORK_INTERFACE', 'eth0'),
-    'expected_ip_prefix': os.getenv('FALCON_EXPECTED_IP_PREFIX', '192.168.1.'),
+    # Auto-detect: tries common interfaces if not specified
+    'expected_interface': os.getenv('FALCON_NETWORK_INTERFACE', ''),
+    'expected_ip_prefix': os.getenv('FALCON_EXPECTED_IP_PREFIX', '192.168.'),
 
     # State file for tracking
     'state_file': '/var/lib/falcon/canary_state.json',
@@ -193,19 +191,36 @@ class FalconCanary:
         return False
 
     def get_current_ip(self, interface: str = None) -> Optional[str]:
-        """Get current IP address for interface"""
+        """Get current IP address for interface (auto-detects if not specified)"""
         interface = interface or self.config['expected_interface']
-        try:
-            success, output = self._run_command(['ip', 'addr', 'show', interface])
-            if success:
-                for line in output.split('\n'):
-                    if 'inet ' in line and 'inet6' not in line:
-                        # Extract IP: "inet 192.168.1.100/24 ..."
-                        parts = line.strip().split()
-                        if len(parts) >= 2:
-                            return parts[1].split('/')[0]
-        except Exception as e:
-            logger.error(f"Could not get IP address: {e}")
+
+        # If interface specified, use it directly
+        if interface:
+            interfaces = [interface]
+        else:
+            # Auto-detect: try common interfaces
+            interfaces = ['eth0', 'wlan0', 'enp0s3', 'ens3', 'ens192']
+
+        for iface in interfaces:
+            try:
+                success, output = self._run_command(['ip', 'addr', 'show', iface])
+                logger.debug(f"Interface {iface}: success={success}, output_len={len(output)}")
+                if success:
+                    for line in output.split('\n'):
+                        if 'inet ' in line and 'inet6' not in line:
+                            # Extract IP: "inet 192.168.1.100/24 ..."
+                            parts = line.strip().split()
+                            if len(parts) >= 2:
+                                ip = parts[1].split('/')[0]
+                                logger.debug(f"Found IP {ip} on {iface}")
+                                # Skip localhost and docker IPs
+                                if not ip.startswith('127.') and not ip.startswith('172.'):
+                                    return ip
+            except Exception as e:
+                logger.debug(f"Interface {iface} error: {e}")
+                continue
+
+        logger.error("Could not get IP address from any interface")
         return None
 
     def check_ip_configuration(self) -> Tuple[bool, str]:
@@ -222,11 +237,27 @@ class FalconCanary:
 
         return True, current_ip
 
+    def _detect_active_interface(self) -> str:
+        """Detect the active network interface"""
+        # Check configured interface first
+        if self.config['expected_interface']:
+            return self.config['expected_interface']
+
+        # Try to find an active interface
+        for iface in ['wlan0', 'eth0', 'enp0s3', 'ens3', 'ens192']:
+            success, output = self._run_command(['ip', 'link', 'show', iface])
+            if success and 'UP' in output:
+                return iface
+
+        # Fallback to eth0
+        return 'eth0'
+
     def repair_network(self) -> bool:
         """Attempt to repair network configuration"""
         logger.info("Attempting network repair...")
 
-        interface = self.config['expected_interface']
+        interface = self._detect_active_interface()
+        logger.info(f"Using interface: {interface}")
         repairs_attempted = []
 
         # Step 1: Bring interface down and up
@@ -299,18 +330,19 @@ class FalconCanary:
         if not is_running:
             return False, f"Service not running: {status}"
 
-        # For dashboard, also check HTTP endpoint
-        if service == 'falcon-dashboard':
-            try:
-                import urllib.request
-                url = 'http://localhost:5000/health'
-                req = urllib.request.Request(url, method='GET')
-                with urllib.request.urlopen(req, timeout=10) as response:
-                    if response.status == 200:
-                        return True, "healthy"
-                    return False, f"Health endpoint returned {response.status}"
-            except Exception as e:
-                return False, f"Health endpoint unreachable: {e}"
+        # For services with HTTP endpoints, also check those
+        for host, port, path in self.config.get('health_endpoints', []):
+            if service in path or (service == 'falcon-dashboard' and port == 5000):
+                try:
+                    import urllib.request
+                    url = f'http://{host}:{port}{path}'
+                    req = urllib.request.Request(url, method='GET')
+                    with urllib.request.urlopen(req, timeout=10) as response:
+                        if response.status == 200:
+                            return True, "healthy"
+                        return False, f"Health endpoint returned {response.status}"
+                except Exception as e:
+                    return False, f"Health endpoint unreachable: {e}"
 
         return True, status
 

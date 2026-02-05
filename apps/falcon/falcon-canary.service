@@ -13,9 +13,9 @@ Environment="FALCON_HOME=/opt/falcon"
 Environment="FALCON_PYTHON=/opt/falcon/venv/bin/python3"
 Environment="PYTHONUNBUFFERED=1"
 
-# Network configuration for canary
-Environment="FALCON_NETWORK_INTERFACE=eth0"
-Environment="FALCON_EXPECTED_IP_PREFIX=192.168.1."
+# Network configuration for canary (leave empty for auto-detection)
+# Environment="FALCON_NETWORK_INTERFACE=eth0"
+Environment="FALCON_EXPECTED_IP_PREFIX=192.168."
 
 # Optional: Alert command (receives: severity, message)
 # Environment="FALCON_ALERT_COMMAND=/opt/falcon/scripts/send_alert.sh"
