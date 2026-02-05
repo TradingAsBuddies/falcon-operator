@@ -60,9 +60,7 @@ CONFIG = {
     'web_endpoints': [
         ('192.168.1.162', 443, '/health', 200),
         ('192.168.1.162', 443, '/strategies', 200),
-        ('192.168.1.162', 443, '/strategies.html', 200),
         ('192.168.1.162', 443, '/orchestrator', 200),
-        ('192.168.1.162', 443, '/orchestrator.html', 200),
         ('192.168.1.162', 443, '/api/account', 200),
         ('192.168.1.162', 443, '/api/positions', 200),
         ('192.168.1.162', 443, '/api/recommendations', 200),
