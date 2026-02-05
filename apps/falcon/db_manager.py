@@ -168,7 +168,34 @@ class DatabaseManager:
         self._create_trading_tables()
         self._create_youtube_strategy_tables()
         self._create_screener_tables()
+        self._run_migrations()
         logger.info("Database schema initialized successfully")
+
+    def _run_migrations(self):
+        """Run database migrations for schema updates"""
+        # Migration: Add initial_balance column to existing account tables
+        try:
+            if self.db_type == 'sqlite':
+                # Check if column exists
+                with self.get_connection() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("PRAGMA table_info(account)")
+                    columns = [row[1] for row in cursor.fetchall()]
+                    if 'initial_balance' not in columns:
+                        cursor.execute(
+                            'ALTER TABLE account ADD COLUMN initial_balance REAL NOT NULL DEFAULT 10000.0'
+                        )
+                        conn.commit()
+                        logger.info("Migration: Added initial_balance column to account table")
+            else:  # postgresql
+                # PostgreSQL: Add column if not exists
+                self.execute('''
+                    ALTER TABLE account
+                    ADD COLUMN IF NOT EXISTS initial_balance DECIMAL(15,2) NOT NULL DEFAULT 10000.0
+                ''')
+                logger.info("Migration: Ensured initial_balance column exists in account table")
+        except Exception as e:
+            logger.warning(f"Migration warning (initial_balance): {e}")
 
     def _create_trading_tables(self):
         """Create paper trading tables"""
@@ -179,6 +206,7 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS account (
                     id INTEGER PRIMARY KEY,
                     cash REAL NOT NULL,
+                    initial_balance REAL NOT NULL DEFAULT 10000.0,
                     last_updated TEXT NOT NULL
                 )
             '''
@@ -187,6 +215,7 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS account (
                     id SERIAL PRIMARY KEY,
                     cash DECIMAL(15,2) NOT NULL,
+                    initial_balance DECIMAL(15,2) NOT NULL DEFAULT 10000.0,
                     last_updated TIMESTAMP NOT NULL
                 )
             '''
@@ -508,12 +537,26 @@ class DatabaseManager:
                 timestamp = timestamp.isoformat()
 
             self.execute(
-                'INSERT INTO account (id, cash, last_updated) VALUES (%s, %s, %s)',
-                (1, initial_balance, timestamp)
+                'INSERT INTO account (id, cash, initial_balance, last_updated) VALUES (%s, %s, %s, %s)',
+                (1, initial_balance, initial_balance, timestamp)
             )
             logger.info(f"Account initialized with ${initial_balance:,.2f}")
         else:
             logger.info("Account already exists")
+
+    def get_initial_balance(self) -> float:
+        """Get the initial balance from account table"""
+        result = self.execute(
+            'SELECT initial_balance FROM account WHERE id = %s',
+            (1,),
+            fetch='one'
+        )
+        if result:
+            # Handle both dict-like (PostgreSQL) and tuple (SQLite) results
+            if hasattr(result, 'get'):
+                return float(result.get('initial_balance', 10000.0) or 10000.0)
+            return float(result[0]) if result[0] else 10000.0
+        return 10000.0  # Default fallback
 
     def close(self):
         """Close database connections"""

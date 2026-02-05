@@ -66,7 +66,7 @@ def get_account():
         "totalValue": account['total_value'],
         "cash": account['cash'],
         "positionsValue": positions_value,
-        "initialBalance": 10000.0  # TODO: Store this in database
+        "initialBalance": db.get_initial_balance()
     })
 
 @app.route('/api/positions')
