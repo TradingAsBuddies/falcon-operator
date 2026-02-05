@@ -397,6 +397,7 @@ def serve_dashboard():
     return send_file('www/orchestrator.html')
 
 
+@app.route('/strategies')
 @app.route('/strategies.html')
 def serve_strategies_page():
     """Serve the strategies list page"""
