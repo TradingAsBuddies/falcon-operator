@@ -51,3 +51,4 @@ cache/
 credentials.json
 *.pem
 *.key
+.pytest_cache/

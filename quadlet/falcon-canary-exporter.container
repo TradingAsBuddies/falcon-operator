@@ -1,0 +1,67 @@
+# falcon-canary-exporter.container — Podman Quadlet unit
+#
+# Prometheus exporter for the Falcon trading dashboard. Replaces the root
+# systemd daemon at deploy/services/falcon-canary.service, which pointed at the
+# retired host 192.168.1.162 with TLS verification off and restarted services
+# on its own initiative.
+#
+# Install (rootless, on the gateway host — NOT run by this repo):
+#   install -m 0644 quadlet/falcon-canary-exporter.container \
+#       ~/.config/containers/systemd/falcon-canary-exporter.container
+#   systemctl --user daemon-reload
+#   systemctl --user start falcon-canary-exporter
+#
+# Scrape config for Prometheus:
+#   - job_name: falcon-canary
+#     static_configs:
+#       - targets: ['falcon-canary-exporter:9107']
+
+[Unit]
+Description=Falcon Canary Exporter - dashboard health and shape probes
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=localhost/falcon-canary-exporter:latest
+ContainerName=falcon-canary-exporter
+
+# Joins the shared pod network so the dashboard is reachable by service name
+# and the exporter is scrapable by Prometheus without publishing a host port.
+Network=falcon.network
+PublishPort=9107:9107
+
+# Target selection. This is the whole point of the port: the host is
+# configuration. Override here, or in the drop-in, when the dashboard moves.
+Environment=FALCON_CANARY_TARGET=http://falcon-trader:5000
+Environment=FALCON_CANARY_PORT=9107
+Environment=FALCON_CANARY_BIND=0.0.0.0
+Environment=FALCON_CANARY_TIMEOUT=10
+Environment=PYTHONUNBUFFERED=1
+
+# Bearer token for the authenticated dashboard (falcon-gateway #1). Keep the
+# token out of the unit file: put FALCON_API_TOKEN=... in the secrets file.
+#   install -m 0600 /dev/null %h/.config/falcon/canary.env
+EnvironmentFile=-%h/.config/falcon/canary.env
+
+# Private CA bundle, if the dashboard is fronted by Traefik with an internal
+# cert. Trust the CA — never disable verification.
+# Volume=%h/.config/falcon/ca.pem:/etc/pki/falcon/ca.pem:ro,Z
+# Environment=FALCON_CANARY_CA_BUNDLE=/etc/pki/falcon/ca.pem
+
+# Read-only observer: no host access, no privileges, nothing to restart.
+User=1000
+ReadOnly=true
+NoNewPrivileges=true
+DropCapability=ALL
+
+HealthCmd=/usr/bin/python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:9107/metrics', timeout=5)"
+HealthInterval=60s
+HealthTimeout=10s
+HealthRetries=3
+
+[Service]
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=default.target
