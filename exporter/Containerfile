@@ -1,0 +1,22 @@
+# Build:  podman build -t falcon-canary-exporter:latest exporter/
+# Run:    see quadlet/falcon-canary-exporter.container
+FROM registry.access.redhat.com/ubi9/python-311:latest
+
+LABEL org.opencontainers.image.title="falcon-canary-exporter" \
+      org.opencontainers.image.description="Prometheus exporter for the Falcon trading dashboard" \
+      org.opencontainers.image.source="https://github.com/TradingAsBuddies/falcon-operator"
+
+USER 1001
+WORKDIR /opt/app-root/src
+
+RUN pip install --no-cache-dir 'requests>=2.31'
+
+COPY falcon_canary_exporter.py ./
+
+ENV PYTHONUNBUFFERED=1 \
+    FALCON_CANARY_TARGET=http://falcon-trader:5000 \
+    FALCON_CANARY_PORT=9107 \
+    FALCON_CANARY_BIND=0.0.0.0
+
+EXPOSE 9107
+ENTRYPOINT ["python3", "falcon_canary_exporter.py"]
